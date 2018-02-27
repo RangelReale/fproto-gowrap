@@ -18,8 +18,9 @@ type Generator struct {
 
 	imports map[string]string
 
-	PkgSource PkgSource
-	TypeConvs []TypeConverter
+	PkgSource  PkgSource
+	TypeConvs  []TypeConverter
+	tc_default TypeConverter
 }
 
 func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
@@ -29,11 +30,12 @@ func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
 	}
 
 	return &Generator{
-		dep:     dep,
-		filedep: filedep,
-		b_head:  NewBuilder(),
-		b_body:  NewBuilder(),
-		imports: make(map[string]string),
+		dep:        dep,
+		filedep:    filedep,
+		b_head:     NewBuilder(),
+		b_body:     NewBuilder(),
+		imports:    make(map[string]string),
+		tc_default: &TypeConverter_Default{},
 	}, nil
 }
 
@@ -44,32 +46,20 @@ func (g *Generator) Body() *Builder {
 func (g *Generator) Generate() error {
 	for _, message := range g.filedep.ProtoFile.Messages {
 		structName := CamelCaseSlice(strings.Split(message.Name, "."))
-		sourceAlias := g.FileDep(g.filedep, "")
+		sourceAlias := g.FileDep(g.filedep, "", true)
 
 		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
 			tc := g.getTypeConv(message, fld)
-			tcok := false
 			if tc != nil {
 				var err error
-				tcok, err = tc.GenerateField(g, message, fld)
+				_, err = tc.GenerateField(g, message, fld)
 				if err != nil {
 					return err
 				}
-			}
-
-			if !tcok {
-				ftype, _, scalar := g.GetType(fld)
-
-				if !scalar {
-					ftype = "*" + ftype
-				}
-				if fld.Repeated {
-					ftype = "[]" + ftype
-				}
-
-				g.b_body.P(CamelCase(fld.Name), " ", ftype)
+			} else {
+				return fmt.Errorf("No type converter found")
 			}
 		}
 		g.b_body.Out()
@@ -82,61 +72,14 @@ func (g *Generator) Generate() error {
 
 		for _, fld := range message.Fields {
 			tc := g.getTypeConv(message, fld)
-			tcok := false
 			if tc != nil {
 				var err error
-				tcok, err = tc.GenerateFieldImport(g, message, fld)
+				_, err = tc.GenerateFieldImport(g, message, fld)
 				if err != nil {
 					return err
 				}
-			}
-
-			if !tcok {
-				if !fld.Repeated {
-					ftype, tp, scalar := g.GetType(fld)
-					if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
-						g.b_body.P("{")
-						g.b_body.In()
-						g.b_body.P("if s.", CamelCase(fld.Name), " != nil {")
-						g.b_body.In()
-
-						g.b_body.P("m.", CamelCase(fld.Name), " = &", ftype, "{}")
-						g.b_body.P("err := m.", CamelCase(fld.Name), ".Import(s.", CamelCase(fld.Name), ")")
-						g.b_body.P("if err != nil {")
-						g.b_body.In()
-						g.b_body.P("return err")
-						g.b_body.Out()
-						g.b_body.P("}")
-
-						g.b_body.Out()
-						g.b_body.P("}")
-
-						g.b_body.Out()
-						g.b_body.P("}")
-					} else {
-						g.b_body.P("m.", CamelCase(fld.Name), " = s.", CamelCase(fld.Name))
-					}
-				} else {
-					ftype, _, scalar := g.GetType(fld)
-
-					g.b_body.P("for _, mi := range s.", CamelCase(fld.Name), " {")
-					g.b_body.In()
-					if !scalar {
-						g.b_body.P("var imp *", ftype)
-						g.b_body.P("err := imp.Import(mi)")
-						g.b_body.P("if err != nil {")
-						g.b_body.In()
-						g.b_body.P("return err")
-						g.b_body.Out()
-						g.b_body.P("}")
-
-						g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", imp)")
-					} else {
-						g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", mi)")
-					}
-					g.b_body.Out()
-					g.b_body.P("}")
-				}
+			} else {
+				return fmt.Errorf("No type converter found")
 			}
 		}
 
@@ -154,53 +97,14 @@ func (g *Generator) Generate() error {
 
 		for _, fld := range message.Fields {
 			tc := g.getTypeConv(message, fld)
-			tcok := false
 			if tc != nil {
 				var err error
-				tcok, err = tc.GenerateFieldExport(g, message, fld)
+				_, err = tc.GenerateFieldExport(g, message, fld)
 				if err != nil {
 					return err
 				}
-			}
-
-			if !tcok {
-				if !fld.Repeated {
-					_, tp, scalar := g.GetType(fld)
-					if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
-						g.b_body.P("{")
-						g.b_body.In()
-						g.b_body.P("if m.", CamelCase(fld.Name), " != nil {")
-						g.b_body.In()
-
-						g.b_body.P("exp, err := m.", CamelCase(fld.Name), ".Export()")
-						g.b_body.P("if err != nil {")
-						g.b_body.In()
-						g.b_body.P("return nil, err")
-						g.b_body.Out()
-						g.b_body.P("}")
-						g.b_body.P("ret.", CamelCase(fld.Name), " = exp")
-
-						g.b_body.Out()
-						g.b_body.P("}")
-						g.b_body.Out()
-						g.b_body.P("}")
-					} else {
-						g.b_body.P("ret.", CamelCase(fld.Name), " = m.", CamelCase(fld.Name))
-					}
-				} else {
-					g.b_body.P("for _, mi := range m.", CamelCase(fld.Name), " {")
-					g.b_body.In()
-					g.b_body.P("exp, err := mi.Export()")
-					g.b_body.P("if err != nil {")
-					g.b_body.In()
-					g.b_body.P("return nil, err")
-					g.b_body.Out()
-					g.b_body.P("}")
-
-					g.b_body.P("ret.", CamelCase(fld.Name), " = append(ret.", CamelCase(fld.Name), ", exp)")
-					g.b_body.Out()
-					g.b_body.P("}")
-				}
+			} else {
+				return fmt.Errorf("No type converter found")
 			}
 		}
 
@@ -216,7 +120,7 @@ func (g *Generator) Generate() error {
 }
 
 func (g *Generator) getTypeConv(message *fproto.MessageElement, fld *fproto.FieldElement) TypeConverter {
-	_, tp, scalar := g.GetType(fld)
+	tp, scalar := g.GetDepType(fld)
 
 	if !scalar {
 		for _, tc := range g.TypeConvs {
@@ -227,10 +131,28 @@ func (g *Generator) getTypeConv(message *fproto.MessageElement, fld *fproto.Fiel
 			}
 		}
 	}
-	return nil
+
+	return g.tc_default
 }
 
-func (g *Generator) GetType(fld *fproto.FieldElement) (t string, tp *fdep.DepType, isscalar bool) {
+func (g *Generator) GetDepType(fld *fproto.FieldElement) (tp *fdep.DepType, isscalar bool) {
+	// check if if scalar
+	if _, ok := fproto.ParseScalarType(fld.Type); ok {
+		isscalar = true
+	} else {
+		isscalar = false
+		var err error
+
+		tp, err = g.filedep.GetType(fld.Type)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	return
+}
+
+func (g *Generator) GetType(fld *fproto.FieldElement, pbsource bool) (t string, tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
 	if st, ok := fproto.ParseScalarType(fld.Type); ok {
 		t = st.String()
@@ -248,7 +170,7 @@ func (g *Generator) GetType(fld *fproto.FieldElement) (t string, tp *fdep.DepTyp
 			//_ = g.FileDep(tp.FileDep, tp.Alias)
 			t = fmt.Sprintf("%s", tp.Name)
 		} else {
-			falias := g.FileDep(tp.FileDep, tp.Alias)
+			falias := g.FileDep(tp.FileDep, tp.Alias, pbsource)
 			t = fmt.Sprintf("%s.%s", falias, tp.Name)
 		}
 	}
@@ -290,9 +212,9 @@ func (g *Generator) Dep(imp string, defalias string) string {
 	return alias
 }
 
-func (g *Generator) FileDep(filedep *fdep.FileDep, defalias string) string {
+func (g *Generator) FileDep(filedep *fdep.FileDep, defalias string, pbsource bool) string {
 	var p string
-	if !filedep.IsSame(g.filedep) && filedep.DepType == fdep.DepType_Own {
+	if !pbsource && !filedep.IsSame(g.filedep) && filedep.DepType == fdep.DepType_Own {
 		p = g.GoWrapPackage(filedep)
 	} else {
 		p = filedep.GoPackage()
