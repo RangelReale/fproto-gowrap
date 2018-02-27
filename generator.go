@@ -40,27 +40,14 @@ func (g *Generator) Body() *Builder {
 
 func (g *Generator) Generate() error {
 	for _, message := range g.filedep.ProtoFile.Messages {
-		g.b_body.P("type ", message.Name, " struct {")
+		structName := CamelCaseSlice(strings.Split(message.Name, "."))
+		sourceAlias := g.Dep(g.filedep, "")
+
+		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
-			var ftype string
+			ftype := g.getType(fld)
 
-			// check if if scalar
-			if st, ok := fproto.ParseScalarType(fld.Type); ok {
-				ftype = st.String()
-			} else {
-				tp, err := g.filedep.GetType(fld.Type)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if tp.FileDep.IsSame(g.filedep) {
-					ftype = fmt.Sprintf("*%s", tp.Name)
-				} else {
-					falias := g.Dep(tp.FileDep, tp.Alias)
-					ftype = fmt.Sprintf("*%s.%s", falias, tp.Name)
-				}
-			}
 			if fld.Repeated {
 				ftype = "[]" + ftype
 			}
@@ -70,9 +57,97 @@ func (g *Generator) Generate() error {
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
+
+		// Import
+		g.b_body.P("func (m *", structName, ") Import(s *", sourceAlias, ".", structName, ") error {")
+		g.b_body.In()
+
+		for _, fld := range message.Fields {
+			if !fld.Repeated {
+				g.b_body.P("m.", CamelCase(fld.Name), " = s.", CamelCase(fld.Name))
+			} else {
+				ftype := g.getType(fld)
+
+				g.b_body.P("for _, mi := range s.", CamelCase(fld.Name), " {")
+				g.b_body.In()
+				g.b_body.P("var imp ", ftype)
+				g.b_body.P("err := imp.Import(mi)")
+				g.b_body.P("if err != nil {")
+				g.b_body.In()
+				g.b_body.P("return err")
+				g.b_body.Out()
+				g.b_body.P("}")
+
+				g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", imp)")
+				g.b_body.Out()
+				g.b_body.P("}")
+			}
+		}
+
+		g.b_body.P("return nil")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		// Export
+		g.b_body.P("func (m *", structName, ") Export() (*", sourceAlias, ".", structName, ", error) {")
+		g.b_body.In()
+
+		g.b_body.P("ret := &", sourceAlias, ".", structName, "{}")
+
+		for _, fld := range message.Fields {
+			if !fld.Repeated {
+				g.b_body.P("ret.", CamelCase(fld.Name), " = m.", CamelCase(fld.Name))
+			} else {
+				g.b_body.P("for _, mi := range m.", CamelCase(fld.Name), " {")
+				g.b_body.In()
+				g.b_body.P("exp, err := mi.Export()")
+				g.b_body.P("if err != nil {")
+				g.b_body.In()
+				g.b_body.P("return nil, err")
+				g.b_body.Out()
+				g.b_body.P("}")
+
+				g.b_body.P("ret.", CamelCase(fld.Name), " = append(ret.", CamelCase(fld.Name), ", exp)")
+				g.b_body.Out()
+				g.b_body.P("}")
+			}
+		}
+
+		g.b_body.P("return ret, nil")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
 	}
 
 	return nil
+}
+
+func (g *Generator) getType(fld *fproto.FieldElement) string {
+	var ftype string
+
+	// check if if scalar
+	if st, ok := fproto.ParseScalarType(fld.Type); ok {
+		ftype = st.String()
+	} else {
+		tp, err := g.filedep.GetType(fld.Type)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if tp.FileDep.IsSame(g.filedep) {
+			//_ = g.Dep(tp.FileDep, tp.Alias)
+			ftype = fmt.Sprintf("*%s", tp.Name)
+		} else {
+			falias := g.Dep(tp.FileDep, tp.Alias)
+			ftype = fmt.Sprintf("*%s.%s", falias, tp.Name)
+		}
+	}
+
+	return ftype
 }
 
 func (g *Generator) Dep(filedep *fdep.FileDep, defalias string) string {
@@ -83,8 +158,8 @@ func (g *Generator) Dep(filedep *fdep.FileDep, defalias string) string {
 		return alias
 	}
 
-	if alias == "" {
-		alias = path.Dir(p)
+	if defalias == "" {
+		defalias = path.Base(p)
 	}
 
 	alias = defalias
