@@ -189,6 +189,8 @@ func (g *Generator) Dep(imp string, defalias string) string {
 		defalias = path.Base(imp)
 	}
 
+	defalias = strings.Replace(defalias, ".", "_", -1)
+
 	alias = defalias
 	aliasct := 0
 	aliasok := false
