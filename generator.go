@@ -194,6 +194,12 @@ func (g *Generator) GenerateServices() error {
 			tc_req := g.getTypeConv(rpc.RequestType)
 			tc_resp := g.getTypeConv(rpc.ResponseType)
 
+			// default return value
+			defretvalue, ok := tc_resp.EmptyValue(g, rpc.ResponseType, true)
+			if !ok {
+				defretvalue, ok = g.tc_default.EmptyValue(g, rpc.ResponseType, true)
+			}
+
 			// convert request
 			_, err := tc_req.GenerateSrvImport(g, rpc.RequestType)
 			if err != nil {
@@ -203,7 +209,7 @@ func (g *Generator) GenerateServices() error {
 			// check error
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return nil, err")
+			g.Body().P("return ", defretvalue, ", err")
 			g.Body().Out()
 			g.Body().P("}")
 
@@ -213,7 +219,7 @@ func (g *Generator) GenerateServices() error {
 			g.Body().P("resp, err := w.srv.", rpc.Name, "(ctx, wreq)")
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return nil, err")
+			g.Body().P("return ", defretvalue, ", err")
 			g.Body().Out()
 			g.Body().P("}")
 
@@ -230,7 +236,7 @@ func (g *Generator) GenerateServices() error {
 			// check error
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return nil, err")
+			g.Body().P("return ", defretvalue, ", err")
 			g.Body().Out()
 			g.Body().P("}")
 

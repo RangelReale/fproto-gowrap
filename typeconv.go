@@ -11,6 +11,8 @@ type TypeConverter interface {
 
 	GenerateSrvImport(g *Generator, fldtype string) (bool, error)
 	GenerateSrvExport(g *Generator, fldtype string) (bool, error)
+
+	EmptyValue(g *Generator, fldtype string, pbsource bool) (string, bool)
 }
 
 type TypeConverterSource struct {

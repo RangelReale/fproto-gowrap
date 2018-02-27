@@ -150,3 +150,13 @@ func (tc *TypeConverter_Default) GenerateSrvExport(g *Generator, fldtype string)
 
 	return true, nil
 }
+
+func (tc *TypeConverter_Default) EmptyValue(g *Generator, fldtype string, pbsource bool) (string, bool) {
+	ftype, _, req_scalar := g.GetType(fldtype, pbsource)
+
+	if !req_scalar {
+		return "&" + ftype + "{}", true
+	} else {
+		return `""`, true
+	}
+}

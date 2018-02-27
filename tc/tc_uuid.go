@@ -85,3 +85,11 @@ func (tc *TypeConverter_UUID) GenerateSrvExport(g *fproto_gowrap.Generator, fldt
 
 	return true, nil
 }
+
+func (tc *TypeConverter_UUID) EmptyValue(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
+	if !pbsource {
+		alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+		return "&" + alias + ".UUID{}", true
+	}
+	return "", false
+}

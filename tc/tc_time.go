@@ -85,3 +85,11 @@ func (tc *TypeConverter_Time) GenerateSrvImport(g *fproto_gowrap.Generator, fldt
 func (tc *TypeConverter_Time) GenerateSrvExport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
 	return false, nil
 }
+
+func (tc *TypeConverter_Time) EmptyValue(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
+	if pbsource {
+		alias := g.Dep("time", "time")
+		return "&" + alias + ".Time{}", true
+	}
+	return "", false
+}
