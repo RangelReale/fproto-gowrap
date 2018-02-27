@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"path"
+	"strings"
 
 	"github.com/RangelReale/fproto"
 	"github.com/RangelReale/fproto/fdep"
@@ -110,7 +111,7 @@ func (g *Generator) Dep(filedep *fdep.FileDep, defalias string) string {
 }
 
 func (g *Generator) String() string {
-	p := baseName(g.filedep.GoPackage())
+	p := baseName(g.GoWrapPackage())
 
 	g.b_head.P("package ", p)
 	g.b_head.P()
@@ -120,4 +121,23 @@ func (g *Generator) String() string {
 	g.b_head.P()
 
 	return g.b_head.String() + g.b_body.String()
+}
+
+func (g *Generator) Filename() string {
+	p := g.GoWrapPackage()
+	return path.Join(p, strings.TrimSuffix(path.Base(g.filedep.FilePath), path.Ext(g.filedep.FilePath))+".gpb.go")
+}
+
+func (g *Generator) GoWrapPackage() string {
+	for _, o := range g.filedep.ProtoFile.Options {
+		if o.Name == "gowrap_package" {
+			return o.Value
+		}
+	}
+	for _, o := range g.filedep.ProtoFile.Options {
+		if o.Name == "go_package" {
+			return o.Value
+		}
+	}
+	return path.Dir(g.filedep.FilePath)
 }
