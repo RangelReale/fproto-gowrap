@@ -11,6 +11,8 @@ import (
 
 type Wrapper struct {
 	dep *fdep.Dep
+
+	PkgSource PkgSource
 }
 
 func NewWrapper(dep *fdep.Dep) *Wrapper {
@@ -21,6 +23,7 @@ func NewWrapper(dep *fdep.Dep) *Wrapper {
 
 func (wp *Wrapper) GenerateFile(filename string, w io.Writer) error {
 	g, err := NewGenerator(wp.dep, filename)
+	g.PkgSource = wp.PkgSource
 	if err != nil {
 		return err
 	}
@@ -43,6 +46,7 @@ func (wp *Wrapper) GenerateFiles(outputpath string) error {
 			if err != nil {
 				return err
 			}
+			g.PkgSource = wp.PkgSource
 
 			err = g.Generate()
 			if err != nil {

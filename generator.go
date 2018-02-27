@@ -17,6 +17,8 @@ type Generator struct {
 	b_body  *Builder
 
 	imports map[string]string
+
+	PkgSource PkgSource
 }
 
 func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
@@ -46,8 +48,11 @@ func (g *Generator) Generate() error {
 		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
-			ftype := g.getType(fld)
+			ftype, _, scalar := g.getType(fld)
 
+			if !scalar {
+				ftype = "*" + ftype
+			}
 			if fld.Repeated {
 				ftype = "[]" + ftype
 			}
@@ -64,21 +69,47 @@ func (g *Generator) Generate() error {
 
 		for _, fld := range message.Fields {
 			if !fld.Repeated {
-				g.b_body.P("m.", CamelCase(fld.Name), " = s.", CamelCase(fld.Name))
+				ftype, tp, scalar := g.getType(fld)
+				if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
+					g.b_body.P("{")
+					g.b_body.In()
+					g.b_body.P("if s.", CamelCase(fld.Name), " != nil {")
+					g.b_body.In()
+
+					g.b_body.P("m.", CamelCase(fld.Name), " = &", ftype, "{}")
+					g.b_body.P("err := m.", CamelCase(fld.Name), ".Import(s.", CamelCase(fld.Name), ")")
+					g.b_body.P("if err != nil {")
+					g.b_body.In()
+					g.b_body.P("return err")
+					g.b_body.Out()
+					g.b_body.P("}")
+
+					g.b_body.Out()
+					g.b_body.P("}")
+
+					g.b_body.Out()
+					g.b_body.P("}")
+				} else {
+					g.b_body.P("m.", CamelCase(fld.Name), " = s.", CamelCase(fld.Name))
+				}
 			} else {
-				ftype := g.getType(fld)
+				ftype, _, scalar := g.getType(fld)
 
 				g.b_body.P("for _, mi := range s.", CamelCase(fld.Name), " {")
 				g.b_body.In()
-				g.b_body.P("var imp ", ftype)
-				g.b_body.P("err := imp.Import(mi)")
-				g.b_body.P("if err != nil {")
-				g.b_body.In()
-				g.b_body.P("return err")
-				g.b_body.Out()
-				g.b_body.P("}")
+				if !scalar {
+					g.b_body.P("var imp *", ftype)
+					g.b_body.P("err := imp.Import(mi)")
+					g.b_body.P("if err != nil {")
+					g.b_body.In()
+					g.b_body.P("return err")
+					g.b_body.Out()
+					g.b_body.P("}")
 
-				g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", imp)")
+					g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", imp)")
+				} else {
+					g.b_body.P("m.", CamelCase(fld.Name), " = append(m.", CamelCase(fld.Name), ", mi)")
+				}
 				g.b_body.Out()
 				g.b_body.P("}")
 			}
@@ -98,7 +129,28 @@ func (g *Generator) Generate() error {
 
 		for _, fld := range message.Fields {
 			if !fld.Repeated {
-				g.b_body.P("ret.", CamelCase(fld.Name), " = m.", CamelCase(fld.Name))
+				_, tp, scalar := g.getType(fld)
+				if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
+					g.b_body.P("{")
+					g.b_body.In()
+					g.b_body.P("if m.", CamelCase(fld.Name), " != nil {")
+					g.b_body.In()
+
+					g.b_body.P("exp, err := m.", CamelCase(fld.Name), ".Export()")
+					g.b_body.P("if err != nil {")
+					g.b_body.In()
+					g.b_body.P("return nil, err")
+					g.b_body.Out()
+					g.b_body.P("}")
+					g.b_body.P("ret.", CamelCase(fld.Name), " = exp")
+
+					g.b_body.Out()
+					g.b_body.P("}")
+					g.b_body.Out()
+					g.b_body.P("}")
+				} else {
+					g.b_body.P("ret.", CamelCase(fld.Name), " = m.", CamelCase(fld.Name))
+				}
 			} else {
 				g.b_body.P("for _, mi := range m.", CamelCase(fld.Name), " {")
 				g.b_body.In()
@@ -126,32 +178,39 @@ func (g *Generator) Generate() error {
 	return nil
 }
 
-func (g *Generator) getType(fld *fproto.FieldElement) string {
-	var ftype string
-
+func (g *Generator) getType(fld *fproto.FieldElement) (t string, tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
 	if st, ok := fproto.ParseScalarType(fld.Type); ok {
-		ftype = st.String()
+		t = st.String()
+		isscalar = true
 	} else {
-		tp, err := g.filedep.GetType(fld.Type)
+		isscalar = false
+		var err error
+
+		tp, err = g.filedep.GetType(fld.Type)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		if tp.FileDep.IsSame(g.filedep) {
 			//_ = g.Dep(tp.FileDep, tp.Alias)
-			ftype = fmt.Sprintf("*%s", tp.Name)
+			t = fmt.Sprintf("%s", tp.Name)
 		} else {
 			falias := g.Dep(tp.FileDep, tp.Alias)
-			ftype = fmt.Sprintf("*%s.%s", falias, tp.Name)
+			t = fmt.Sprintf("%s.%s", falias, tp.Name)
 		}
 	}
 
-	return ftype
+	return
 }
 
 func (g *Generator) Dep(filedep *fdep.FileDep, defalias string) string {
-	p := filedep.GoPackage()
+	var p string
+	if !filedep.IsSame(g.filedep) && filedep.DepType == fdep.DepType_Own {
+		p = g.GoWrapPackage(filedep)
+	} else {
+		p = filedep.GoPackage()
+	}
 	var alias string
 	var ok bool
 	if alias, ok = g.imports[p]; ok {
@@ -186,7 +245,7 @@ func (g *Generator) Dep(filedep *fdep.FileDep, defalias string) string {
 }
 
 func (g *Generator) String() string {
-	p := baseName(g.GoWrapPackage())
+	p := baseName(g.GoWrapPackage(g.filedep))
 
 	g.b_head.P("package ", p)
 	g.b_head.P()
@@ -199,20 +258,26 @@ func (g *Generator) String() string {
 }
 
 func (g *Generator) Filename() string {
-	p := g.GoWrapPackage()
+	p := g.GoWrapPackage(g.filedep)
 	return path.Join(p, strings.TrimSuffix(path.Base(g.filedep.FilePath), path.Ext(g.filedep.FilePath))+".gpb.go")
 }
 
-func (g *Generator) GoWrapPackage() string {
-	for _, o := range g.filedep.ProtoFile.Options {
+func (g *Generator) GoWrapPackage(filedep *fdep.FileDep) string {
+	if g.PkgSource != nil {
+		if p, ok := g.PkgSource.GetPkg(filedep); ok {
+			return p
+		}
+	}
+
+	for _, o := range filedep.ProtoFile.Options {
 		if o.Name == "gowrap_package" {
 			return o.Value
 		}
 	}
-	for _, o := range g.filedep.ProtoFile.Options {
+	for _, o := range filedep.ProtoFile.Options {
 		if o.Name == "go_package" {
 			return o.Value
 		}
 	}
-	return path.Dir(g.filedep.FilePath)
+	return path.Dir(filedep.FilePath)
 }
