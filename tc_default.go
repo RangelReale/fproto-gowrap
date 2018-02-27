@@ -12,8 +12,16 @@ func (tc *TypeConverter_Default) GetSources() []TypeConverterSource {
 	return []TypeConverterSource{}
 }
 
+func (tc *TypeConverter_Default) GetType(g *Generator, fldtype string, pbsource bool) string {
+	ftype, _, scalar := g.GetType(fldtype, pbsource)
+	if !scalar {
+		ftype = "*" + ftype
+	}
+	return ftype
+}
+
 func (tc *TypeConverter_Default) GenerateField(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
-	ftype, _, scalar := g.GetType(fld, false)
+	ftype, _, scalar := g.GetType(fld.Type, false)
 
 	if !scalar {
 		ftype = "*" + ftype
@@ -29,7 +37,7 @@ func (tc *TypeConverter_Default) GenerateField(g *Generator, message *fproto.Mes
 
 func (tc *TypeConverter_Default) GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	if !fld.Repeated {
-		ftype, tp, scalar := g.GetType(fld, false)
+		ftype, tp, scalar := g.GetType(fld.Type, false)
 		if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
 			g.Body().P("{")
 			g.Body().In()
@@ -53,7 +61,7 @@ func (tc *TypeConverter_Default) GenerateFieldImport(g *Generator, message *fpro
 			g.Body().P("m.", CamelCase(fld.Name), " = s.", CamelCase(fld.Name))
 		}
 	} else {
-		ftype, _, scalar := g.GetType(fld, true)
+		ftype, _, scalar := g.GetType(fld.Type, false)
 
 		g.Body().P("for _, mi := range s.", CamelCase(fld.Name), " {")
 		g.Body().In()
@@ -78,7 +86,7 @@ func (tc *TypeConverter_Default) GenerateFieldImport(g *Generator, message *fpro
 
 func (tc *TypeConverter_Default) GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	if !fld.Repeated {
-		_, tp, scalar := g.GetType(fld, true)
+		_, tp, scalar := g.GetType(fld.Type, true)
 		if !scalar && !tp.FileDep.IsSame(g.filedep) && tp.FileDep.DepType == fdep.DepType_Own {
 			g.Body().P("{")
 			g.Body().In()
@@ -113,6 +121,31 @@ func (tc *TypeConverter_Default) GenerateFieldExport(g *Generator, message *fpro
 		g.Body().P("ret.", CamelCase(fld.Name), " = append(ret.", CamelCase(fld.Name), ", exp)")
 		g.Body().Out()
 		g.Body().P("}")
+	}
+
+	return true, nil
+}
+
+func (tc *TypeConverter_Default) GenerateSrvImport(g *Generator, fldtype string) (bool, error) {
+	cftype_req, tp, req_scalar := g.GetType(fldtype, false)
+
+	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {
+		g.Body().P("wreq := &", cftype_req, "{}")
+		g.Body().P("err = wreq.Import(req)")
+	} else {
+		g.Body().P("wreq := req")
+	}
+
+	return true, nil
+}
+
+func (tc *TypeConverter_Default) GenerateSrvExport(g *Generator, fldtype string) (bool, error) {
+	_, tp, req_scalar := g.GetType(fldtype, false)
+
+	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {
+		g.Body().P("wresp, err := resp.Export()")
+	} else {
+		g.Body().P("wresp := resp")
 	}
 
 	return true, nil

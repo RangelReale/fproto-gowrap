@@ -19,6 +19,11 @@ func (tc *TypeConverter_Time) GetSources() []fproto_gowrap.TypeConverterSource {
 	}
 }
 
+func (tc *TypeConverter_Time) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
+	alias := g.Dep("time", "time")
+	return fmt.Sprintf("%s.%s", alias, "Time")
+}
+
 func (tc *TypeConverter_Time) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	alias := g.Dep("time", "time")
 
@@ -71,4 +76,12 @@ func (tc *TypeConverter_Time) GenerateFieldExport(g *fproto_gowrap.Generator, me
 	g.Body().P("}")
 
 	return true, nil
+}
+
+func (tc *TypeConverter_Time) GenerateSrvImport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	return false, nil
+}
+
+func (tc *TypeConverter_Time) GenerateSrvExport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	return false, nil
 }

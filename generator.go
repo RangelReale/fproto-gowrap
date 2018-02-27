@@ -44,6 +44,20 @@ func (g *Generator) Body() *Builder {
 }
 
 func (g *Generator) Generate() error {
+	err := g.GenerateMessages()
+	if err != nil {
+		return err
+	}
+
+	err = g.GenerateServices()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *Generator) GenerateMessages() error {
 	for _, message := range g.filedep.ProtoFile.Messages {
 		structName := CamelCaseSlice(strings.Split(message.Name, "."))
 		sourceAlias := g.FileDep(g.filedep, "", true)
@@ -51,7 +65,7 @@ func (g *Generator) Generate() error {
 		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(message, fld)
+			tc := g.getTypeConv(fld.Type)
 			if tc != nil {
 				var err error
 				_, err = tc.GenerateField(g, message, fld)
@@ -71,7 +85,7 @@ func (g *Generator) Generate() error {
 		g.b_body.In()
 
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(message, fld)
+			tc := g.getTypeConv(fld.Type)
 			if tc != nil {
 				var err error
 				_, err = tc.GenerateFieldImport(g, message, fld)
@@ -96,7 +110,7 @@ func (g *Generator) Generate() error {
 		g.b_body.P("ret := &", sourceAlias, ".", structName, "{}")
 
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(message, fld)
+			tc := g.getTypeConv(fld.Type)
 			if tc != nil {
 				var err error
 				_, err = tc.GenerateFieldExport(g, message, fld)
@@ -119,8 +133,134 @@ func (g *Generator) Generate() error {
 	return nil
 }
 
-func (g *Generator) getTypeConv(message *fproto.MessageElement, fld *fproto.FieldElement) TypeConverter {
-	tp, scalar := g.GetDepType(fld)
+func (g *Generator) GenerateServices() error {
+	if len(g.filedep.ProtoFile.Services) == 0 {
+		return nil
+	}
+
+	ctx_alias := g.Dep("golang.org/x/net/context", "context")
+	grpc_alias := g.Dep("google.golang.org/grpc", "grpc")
+
+	for _, service := range g.filedep.ProtoFile.Services {
+		svcName := CamelCase(service.Name)
+
+		g.b_body.P("type ", svcName, "Server interface {")
+		g.b_body.In()
+
+		for _, rpc := range service.RPCs {
+			tc_req := g.getTypeConv(rpc.RequestType)
+			tc_resp := g.getTypeConv(rpc.ResponseType)
+
+			if tc_req == nil || tc_resp == nil {
+				return fmt.Errorf("No type converter found")
+			}
+
+			ftype_req := tc_req.GetType(g, rpc.RequestType, false)
+			ftype_resp := tc_resp.GetType(g, rpc.ResponseType, false)
+
+			g.b_body.P(rpc.Name, "(", ctx_alias, ".Context, ", ftype_req, ") (", ftype_resp, ", error)")
+		}
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		g.b_body.P("type wrap", svcName, "Server struct {")
+		g.b_body.In()
+
+		g.b_body.P("srv ", svcName, "Server")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		for _, rpc := range service.RPCs {
+			ftype_req, _, req_scalar := g.GetType(rpc.RequestType, true)
+			ftype_resp, _, resp_scalar := g.GetType(rpc.ResponseType, true)
+
+			if !req_scalar {
+				ftype_req = "*" + ftype_req
+			}
+			if !resp_scalar {
+				ftype_resp = "*" + ftype_resp
+			}
+
+			g.b_body.P("func (w *wrap", svcName, "Server) ", rpc.Name, "(ctx ", ctx_alias, ".Context, req ", ftype_req, ") (", ftype_resp, ", error) {")
+			g.b_body.In()
+			g.Body().P("var err error")
+
+			g.Body().P()
+
+			tc_req := g.getTypeConv(rpc.RequestType)
+			tc_resp := g.getTypeConv(rpc.ResponseType)
+
+			// convert request
+			_, err := tc_req.GenerateSrvImport(g, rpc.RequestType)
+			if err != nil {
+				return err
+			}
+
+			// check error
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return nil, err")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			// call
+			g.Body().P("resp, err := w.srv.", rpc.Name, "(ctx, wreq)")
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return nil, err")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			// convert response
+			g.Body().P("err = nil")
+
+			_, err = tc_resp.GenerateSrvExport(g, rpc.ResponseType)
+			if err != nil {
+				return err
+			}
+
+			// check error
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return nil, err")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			g.b_body.P("return wresp, nil")
+
+			g.b_body.Out()
+			g.b_body.P("}")
+			g.b_body.P()
+		}
+
+		g.b_body.P("func Register", svcName, "Server(s *", grpc_alias, ".Server, srv ", svcName, "Server) {")
+		g.b_body.In()
+
+		func_alias := g.FileDep(g.filedep, "", true)
+
+		g.b_body.P(func_alias, ".Register", svcName, "Server(s, &wrap", svcName, "Server{srv})")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+
+		g.b_body.P()
+	}
+
+	return nil
+}
+
+func (g *Generator) getTypeConv(fldtype string) TypeConverter {
+	tp, scalar := g.GetDepType(fldtype)
 
 	if !scalar {
 		for _, tc := range g.TypeConvs {
@@ -135,15 +275,15 @@ func (g *Generator) getTypeConv(message *fproto.MessageElement, fld *fproto.Fiel
 	return g.tc_default
 }
 
-func (g *Generator) GetDepType(fld *fproto.FieldElement) (tp *fdep.DepType, isscalar bool) {
+func (g *Generator) GetDepType(fldtype string) (tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
-	if _, ok := fproto.ParseScalarType(fld.Type); ok {
+	if _, ok := fproto.ParseScalarType(fldtype); ok {
 		isscalar = true
 	} else {
 		isscalar = false
 		var err error
 
-		tp, err = g.filedep.GetType(fld.Type)
+		tp, err = g.filedep.GetType(fldtype)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -152,21 +292,21 @@ func (g *Generator) GetDepType(fld *fproto.FieldElement) (tp *fdep.DepType, issc
 	return
 }
 
-func (g *Generator) GetType(fld *fproto.FieldElement, pbsource bool) (t string, tp *fdep.DepType, isscalar bool) {
+func (g *Generator) GetType(fldtype string, pbsource bool) (t string, tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
-	if st, ok := fproto.ParseScalarType(fld.Type); ok {
+	if st, ok := fproto.ParseScalarType(fldtype); ok {
 		t = st.String()
 		isscalar = true
 	} else {
 		isscalar = false
 		var err error
 
-		tp, err = g.filedep.GetType(fld.Type)
+		tp, err = g.filedep.GetType(fldtype)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if tp.FileDep.IsSame(g.filedep) {
+		if !pbsource && tp.FileDep.IsSame(g.filedep) {
 			//_ = g.FileDep(tp.FileDep, tp.Alias)
 			t = fmt.Sprintf("%s", tp.Name)
 		} else {

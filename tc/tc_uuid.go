@@ -10,6 +10,11 @@ import (
 type TypeConverter_UUID struct {
 }
 
+func (tc *TypeConverter_UUID) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
+	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+	return fmt.Sprintf("%s.%s", alias, "UUID")
+}
+
 func (tc *TypeConverter_UUID) GetSources() []fproto_gowrap.TypeConverterSource {
 	return []fproto_gowrap.TypeConverterSource{
 		{
@@ -54,10 +59,29 @@ func (tc *TypeConverter_UUID) GenerateFieldImport(g *fproto_gowrap.Generator, me
 }
 
 func (tc *TypeConverter_UUID) GenerateFieldExport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
-	ftype, _, _ := g.GetType(fld, true)
+	ftype, _, _ := g.GetType(fld.Type, true)
 
 	g.Body().P("ret.", fproto_gowrap.CamelCase(fld.Name), " = &", ftype, "{}")
 	g.Body().P("ret.", fproto_gowrap.CamelCase(fld.Name), ".Value = m.", fproto_gowrap.CamelCase(fld.Name), ".String()")
+
+	return true, nil
+}
+
+func (tc *TypeConverter_UUID) GenerateSrvImport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+
+	g.Body().P("var wreq ", alias, ".UUID")
+
+	g.Body().P("wreq, err = ", alias, ".FromString(req.Value)")
+
+	return true, nil
+}
+
+func (tc *TypeConverter_UUID) GenerateSrvExport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	ftype, _, _ := g.GetType(fldtype, true)
+
+	g.Body().P("wresp := &", ftype, "{}")
+	g.Body().P("wresp.Value = resp.String()")
 
 	return true, nil
 }
