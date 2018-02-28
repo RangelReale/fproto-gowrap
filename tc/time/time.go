@@ -1,4 +1,4 @@
-package fproto_gowrap_tc
+package tctime
 
 import (
 	"fmt"
@@ -7,10 +7,10 @@ import (
 	"github.com/RangelReale/fproto-gowrap"
 )
 
-type TypeConverter_Time struct {
+type TimeConvert struct {
 }
 
-func (tc *TypeConverter_Time) GetSources() []fproto_gowrap.TypeConverterSource {
+func (tc *TimeConvert) GetSources() []fproto_gowrap.TypeConverterSource {
 	return []fproto_gowrap.TypeConverterSource{
 		{
 			FilePath:    "google/protobuf/timestamp.proto",
@@ -19,12 +19,12 @@ func (tc *TypeConverter_Time) GetSources() []fproto_gowrap.TypeConverterSource {
 	}
 }
 
-func (tc *TypeConverter_Time) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
+func (tc *TimeConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
 	alias := g.Dep("time", "time")
 	return fmt.Sprintf("%s.%s", alias, "Time")
 }
 
-func (tc *TypeConverter_Time) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (tc *TimeConvert) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	alias := g.Dep("time", "time")
 
 	ftype := fmt.Sprintf("%s.Time", alias)
@@ -38,7 +38,7 @@ func (tc *TypeConverter_Time) GenerateField(g *fproto_gowrap.Generator, message 
 	return true, nil
 }
 
-func (tc *TypeConverter_Time) GenerateFieldImport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (tc *TimeConvert) GenerateFieldImport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	pb_alias := g.Dep("github.com/golang/protobuf/ptypes", "pb_types")
 
 	g.Body().P("if s.", fproto_gowrap.CamelCase(fld.Name), " != nil {")
@@ -58,7 +58,7 @@ func (tc *TypeConverter_Time) GenerateFieldImport(g *fproto_gowrap.Generator, me
 	return true, nil
 }
 
-func (tc *TypeConverter_Time) GenerateFieldExport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (tc *TimeConvert) GenerateFieldExport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
 	pb_alias := g.Dep("github.com/golang/protobuf/ptypes", "pb_types")
 
 	g.Body().P("{")
@@ -78,15 +78,23 @@ func (tc *TypeConverter_Time) GenerateFieldExport(g *fproto_gowrap.Generator, me
 	return true, nil
 }
 
-func (tc *TypeConverter_Time) GenerateSrvImport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *TimeConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	if srvtype != "grpc" {
+		return false, nil
+	}
+
 	return false, nil
 }
 
-func (tc *TypeConverter_Time) GenerateSrvExport(g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *TimeConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+	if srvtype != "grpc" {
+		return false, nil
+	}
+
 	return false, nil
 }
 
-func (tc *TypeConverter_Time) EmptyValue(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
+func (tc *TimeConvert) EmptyValue(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
 	if pbsource {
 		alias := g.Dep("time", "time")
 		return "&" + alias + ".Time{}", true

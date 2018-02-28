@@ -9,8 +9,8 @@ type TypeConverter interface {
 	GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
 	GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
 
-	GenerateSrvImport(g *Generator, fldtype string) (bool, error)
-	GenerateSrvExport(g *Generator, fldtype string) (bool, error)
+	GenerateSrvImport(srvtype string, g *Generator, fldtype string) (bool, error)
+	GenerateSrvExport(srvtype string, g *Generator, fldtype string) (bool, error)
 
 	EmptyValue(g *Generator, fldtype string, pbsource bool) (string, bool)
 }

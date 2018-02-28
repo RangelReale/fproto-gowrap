@@ -126,7 +126,11 @@ func (tc *TypeConverter_Default) GenerateFieldExport(g *Generator, message *fpro
 	return true, nil
 }
 
-func (tc *TypeConverter_Default) GenerateSrvImport(g *Generator, fldtype string) (bool, error) {
+func (tc *TypeConverter_Default) GenerateSrvImport(srvtype string, g *Generator, fldtype string) (bool, error) {
+	if srvtype != "grpc" {
+		return false, nil
+	}
+
 	cftype_req, tp, req_scalar := g.GetType(fldtype, false)
 
 	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {
@@ -139,7 +143,11 @@ func (tc *TypeConverter_Default) GenerateSrvImport(g *Generator, fldtype string)
 	return true, nil
 }
 
-func (tc *TypeConverter_Default) GenerateSrvExport(g *Generator, fldtype string) (bool, error) {
+func (tc *TypeConverter_Default) GenerateSrvExport(srvtype string, g *Generator, fldtype string) (bool, error) {
+	if srvtype != "grpc" {
+		return false, nil
+	}
+
 	_, tp, req_scalar := g.GetType(fldtype, false)
 
 	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {

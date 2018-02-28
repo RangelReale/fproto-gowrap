@@ -11,16 +11,17 @@ import (
 )
 
 type Generator struct {
-	dep     *fdep.Dep
-	filedep *fdep.FileDep
-	b_head  *Builder
-	b_body  *Builder
+	dep        *fdep.Dep
+	filedep    *fdep.FileDep
+	b_head     *Builder
+	b_body     *Builder
+	tc_default TypeConverter
 
 	imports map[string]string
 
-	PkgSource  PkgSource
-	TypeConvs  []TypeConverter
-	tc_default TypeConverter
+	PkgSource PkgSource
+	TypeConvs []TypeConverter
+	SrvType   string
 }
 
 func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
@@ -36,6 +37,7 @@ func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
 		b_body:     NewBuilder(),
 		imports:    make(map[string]string),
 		tc_default: &TypeConverter_Default{},
+		SrvType:    "grpc",
 	}, nil
 }
 
@@ -134,12 +136,20 @@ func (g *Generator) GenerateMessages() error {
 }
 
 func (g *Generator) GenerateServices() error {
+	if g.SrvType == "" {
+		return nil
+	}
+	if g.SrvType != "grpc" {
+		return fmt.Errorf("Unknown service type '%s'", g.SrvType)
+	}
+
 	if len(g.filedep.ProtoFile.Services) == 0 {
 		return nil
 	}
 
 	ctx_alias := g.Dep("golang.org/x/net/context", "context")
 	grpc_alias := g.Dep("google.golang.org/grpc", "grpc")
+	wraputil_alias := g.Dep("github.com/RangelReale/fproto-gowrap/wraputil", "wraputil")
 
 	for _, service := range g.filedep.ProtoFile.Services {
 		svcName := CamelCase(service.Name)
@@ -169,6 +179,29 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.In()
 
 		g.b_body.P("srv ", svcName, "Server")
+		g.b_body.P("errorHandler ", wraputil_alias, ".ServiceErrorHandler")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		g.b_body.P("func newWrap", svcName, "Server(srv ", svcName, "Server) *wrap", svcName, "Server {")
+		g.b_body.In()
+
+		g.b_body.P("w := &wrap", svcName, "Server{srv: srv}")
+
+		// check if implements ServiceErrorHandler
+		g.Body().P("if eh, ok := srv.(", wraputil_alias, ".ServiceErrorHandler); ok {")
+		g.b_body.In()
+		g.Body().P("w.errorHandler = eh")
+		g.b_body.Out()
+		g.Body().P("} else {")
+		g.b_body.In()
+		g.Body().P("w.errorHandler = &", wraputil_alias, ".ServiceErrorHandler_Default{}")
+		g.b_body.Out()
+		g.Body().P("}")
+
+		g.b_body.P("return w")
 
 		g.b_body.Out()
 		g.b_body.P("}")
@@ -201,7 +234,7 @@ func (g *Generator) GenerateServices() error {
 			}
 
 			// convert request
-			_, err := tc_req.GenerateSrvImport(g, rpc.RequestType)
+			_, err := tc_req.GenerateSrvImport(g.SrvType, g, rpc.RequestType)
 			if err != nil {
 				return err
 			}
@@ -209,7 +242,7 @@ func (g *Generator) GenerateServices() error {
 			// check error
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return ", defretvalue, ", err")
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_IMPORT, err)")
 			g.Body().Out()
 			g.Body().P("}")
 
@@ -219,7 +252,7 @@ func (g *Generator) GenerateServices() error {
 			g.Body().P("resp, err := w.srv.", rpc.Name, "(ctx, wreq)")
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return ", defretvalue, ", err")
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_CALL, err)")
 			g.Body().Out()
 			g.Body().P("}")
 
@@ -228,7 +261,7 @@ func (g *Generator) GenerateServices() error {
 			// convert response
 			g.Body().P("err = nil")
 
-			_, err = tc_resp.GenerateSrvExport(g, rpc.ResponseType)
+			_, err = tc_resp.GenerateSrvExport(g.SrvType, g, rpc.ResponseType)
 			if err != nil {
 				return err
 			}
@@ -236,7 +269,7 @@ func (g *Generator) GenerateServices() error {
 			// check error
 			g.Body().P("if err != nil {")
 			g.Body().In()
-			g.Body().P("return ", defretvalue, ", err")
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_EXPORT, err)")
 			g.Body().Out()
 			g.Body().P("}")
 
@@ -254,7 +287,7 @@ func (g *Generator) GenerateServices() error {
 
 		func_alias := g.FileDep(g.filedep, "", true)
 
-		g.b_body.P(func_alias, ".Register", svcName, "Server(s, &wrap", svcName, "Server{srv})")
+		g.b_body.P(func_alias, ".Register", svcName, "Server(s, newWrap", svcName, "Server(srv))")
 
 		g.b_body.Out()
 		g.b_body.P("}")
