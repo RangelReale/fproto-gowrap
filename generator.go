@@ -457,7 +457,7 @@ func (g *Generator) GetDepType(fldtype string) (tp *fdep.DepType, isscalar bool)
 func (g *Generator) GetType(fldtype string, pbsource bool) (t string, tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
 	if st, ok := fproto.ParseScalarType(fldtype); ok {
-		t = st.String()
+		t = st.GoType()
 		isscalar = true
 	} else {
 		isscalar = false
