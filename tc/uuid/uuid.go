@@ -18,8 +18,8 @@ func (tc *UUIDConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsou
 func (tc *UUIDConvert) GetSources() []fproto_gowrap.TypeConverterSource {
 	return []fproto_gowrap.TypeConverterSource{
 		{
-			FilePath:    "pt1/base/uuid.proto",
-			PackageName: "p1_base",
+			FilePath:    "github.com/RangelReale/fproto-gowrap/tc/uuid/uuid.proto",
+			PackageName: "uuid",
 		},
 	}
 }

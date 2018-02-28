@@ -1,0 +1,7 @@
+syntax = "proto3";
+package uuid;
+option go_package = "github.com/RangelReale/fproto-gowrap/tc/uuid";
+
+message UUID {
+    string value = 1;
+}
