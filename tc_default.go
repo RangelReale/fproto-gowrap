@@ -66,7 +66,7 @@ func (tc *TypeConverter_Default) GenerateFieldImport(g *Generator, message *fpro
 		g.Body().P("for _, mi := range s.", CamelCase(fld.Name), " {")
 		g.Body().In()
 		if !scalar {
-			g.Body().P("var imp *", ftype)
+			g.Body().P("imp := &", ftype, "{}")
 			g.Body().P("err := imp.Import(mi)")
 			g.Body().P("if err != nil {")
 			g.Body().In()
