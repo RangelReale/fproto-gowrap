@@ -12,12 +12,12 @@ func (tc *TypeConverter_Default) GetSources() []TypeConverterSource {
 	return []TypeConverterSource{}
 }
 
-func (tc *TypeConverter_Default) GetType(g *Generator, fldtype string, pbsource bool) string {
+func (tc *TypeConverter_Default) GetType(g *Generator, fldtype string, pbsource bool) (string, bool) {
 	ftype, _, scalar := g.GetType(fldtype, pbsource)
 	if !scalar {
 		ftype = "*" + ftype
 	}
-	return ftype
+	return ftype, true
 }
 
 func (tc *TypeConverter_Default) GenerateField(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
@@ -126,7 +126,7 @@ func (tc *TypeConverter_Default) GenerateFieldExport(g *Generator, message *fpro
 	return true, nil
 }
 
-func (tc *TypeConverter_Default) GenerateSrvImport(srvtype string, g *Generator, fldtype string) (bool, error) {
+func (tc *TypeConverter_Default) GenerateSrvImport(srvtype string, g *Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
@@ -134,16 +134,16 @@ func (tc *TypeConverter_Default) GenerateSrvImport(srvtype string, g *Generator,
 	cftype_req, tp, req_scalar := g.GetType(fldtype, false)
 
 	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {
-		g.Body().P("wreq := &", cftype_req, "{}")
-		g.Body().P("err = wreq.Import(req)")
+		g.Body().P(retVarName, " := &", cftype_req, "{}")
+		g.Body().P("err = ", retVarName, ".Import(", reqVarName, ")")
 	} else {
-		g.Body().P("wreq := req")
+		g.Body().P(retVarName, " := ", reqVarName)
 	}
 
 	return true, nil
 }
 
-func (tc *TypeConverter_Default) GenerateSrvExport(srvtype string, g *Generator, fldtype string) (bool, error) {
+func (tc *TypeConverter_Default) GenerateSrvExport(srvtype string, g *Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
@@ -151,9 +151,9 @@ func (tc *TypeConverter_Default) GenerateSrvExport(srvtype string, g *Generator,
 	_, tp, req_scalar := g.GetType(fldtype, false)
 
 	if tp.FileDep.DepType == fdep.DepType_Own && !req_scalar {
-		g.Body().P("wresp, err := resp.Export()")
+		g.Body().P(retVarName, ", err := ", reqVarName, ".Export()")
 	} else {
-		g.Body().P("wresp := resp")
+		g.Body().P(retVarName, " := ", reqVarName)
 	}
 
 	return true, nil

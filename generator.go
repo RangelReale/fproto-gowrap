@@ -150,9 +150,140 @@ func (g *Generator) GenerateServices() error {
 	ctx_alias := g.Dep("golang.org/x/net/context", "context")
 	grpc_alias := g.Dep("google.golang.org/grpc", "grpc")
 	wraputil_alias := g.Dep("github.com/RangelReale/fproto-gowrap/wraputil", "wraputil")
+	func_alias := g.FileDep(g.filedep, "", true)
 
 	for _, service := range g.filedep.ProtoFile.Services {
 		svcName := CamelCase(service.Name)
+
+		//
+		// CLIENT
+		//
+
+		g.b_body.P("type ", svcName, "Client interface {")
+		g.b_body.In()
+
+		for _, rpc := range service.RPCs {
+			tc_req := g.getTypeConv(rpc.RequestType)
+			tc_resp := g.getTypeConv(rpc.ResponseType)
+
+			if tc_req == nil || tc_resp == nil {
+				return fmt.Errorf("No type converter found")
+			}
+
+			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
+			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
+
+			g.b_body.P(rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...grpc.CallOption) (", ftype_resp, ", error)")
+		}
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		g.b_body.P("type wrap", svcName, "Client struct {")
+		g.b_body.In()
+
+		g.b_body.P("cli ", func_alias, ".", svcName, "Client")
+		g.b_body.P("errorHandler ", wraputil_alias, ".ServiceErrorHandler")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		g.b_body.P("func New", svcName, "Client(cc *", grpc_alias, ".ClientConn, errorHandler ...", wraputil_alias, ".ServiceErrorHandler) ", svcName, "Client {")
+		g.b_body.In()
+
+		g.b_body.P("w := &wrap", svcName, "Client{cli: ", func_alias, ".New", svcName, "Client(cc)}")
+
+		// check if implements ServiceErrorHandler
+		g.Body().P("if len(errorHandler) > 0 {")
+		g.b_body.In()
+		g.Body().P("w.errorHandler = errorHandler[0]")
+		g.b_body.Out()
+		g.Body().P("} else {")
+		g.b_body.In()
+		g.Body().P("w.errorHandler = &", wraputil_alias, ".ServiceErrorHandler_Default{}")
+		g.b_body.Out()
+		g.Body().P("}")
+
+		g.b_body.P("return w")
+
+		g.b_body.Out()
+		g.b_body.P("}")
+		g.b_body.P()
+
+		for _, rpc := range service.RPCs {
+			tc_req := g.getTypeConv(rpc.RequestType)
+			tc_resp := g.getTypeConv(rpc.ResponseType)
+
+			if tc_req == nil || tc_resp == nil {
+				return fmt.Errorf("No type converter found")
+			}
+
+			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
+			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
+
+			g.b_body.P("func (w *wrap", svcName, "Client) ", rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...grpc.CallOption) (", ftype_resp, ", error) {")
+			g.b_body.In()
+			g.Body().P("var err error")
+
+			g.Body().P()
+
+			// default return value
+			defretvalue, _ := tc_resp.EmptyValue(g, rpc.ResponseType, false)
+
+			// convert request
+			_, err := tc_req.GenerateSrvExport(g.SrvType, g, "in", "wreq", rpc.RequestType)
+			if err != nil {
+				return err
+			}
+
+			// check error
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_EXPORT, err)")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			// call
+			g.Body().P("resp, err := w.cli.", rpc.Name, "(ctx, wreq)")
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_CALL, err)")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			// convert response
+			g.Body().P("err = nil")
+
+			_, err = tc_resp.GenerateSrvImport(g.SrvType, g, "resp", "wresp", rpc.ResponseType)
+			if err != nil {
+				return err
+			}
+
+			// check error
+			g.Body().P("if err != nil {")
+			g.Body().In()
+			g.Body().P("return ", defretvalue, ", w.errorHandler.HandleServiceError(", wraputil_alias, ".SET_IMPORT, err)")
+			g.Body().Out()
+			g.Body().P("}")
+
+			g.Body().P()
+
+			g.b_body.P("return wresp, nil")
+
+			g.b_body.Out()
+			g.b_body.P("}")
+			g.b_body.P()
+		}
+
+		//
+		// SERVER
+		//
 
 		g.b_body.P("type ", svcName, "Server interface {")
 		g.b_body.In()
@@ -165,8 +296,8 @@ func (g *Generator) GenerateServices() error {
 				return fmt.Errorf("No type converter found")
 			}
 
-			ftype_req := tc_req.GetType(g, rpc.RequestType, false)
-			ftype_resp := tc_resp.GetType(g, rpc.ResponseType, false)
+			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
+			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
 
 			g.b_body.P(rpc.Name, "(", ctx_alias, ".Context, ", ftype_req, ") (", ftype_resp, ", error)")
 		}
@@ -208,15 +339,15 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.P()
 
 		for _, rpc := range service.RPCs {
-			ftype_req, _, req_scalar := g.GetType(rpc.RequestType, true)
-			ftype_resp, _, resp_scalar := g.GetType(rpc.ResponseType, true)
+			tc_req := g.getTypeConv(rpc.RequestType)
+			tc_resp := g.getTypeConv(rpc.ResponseType)
 
-			if !req_scalar {
-				ftype_req = "*" + ftype_req
+			if tc_req == nil || tc_resp == nil {
+				return fmt.Errorf("No type converter found")
 			}
-			if !resp_scalar {
-				ftype_resp = "*" + ftype_resp
-			}
+
+			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, true)
+			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, true)
 
 			g.b_body.P("func (w *wrap", svcName, "Server) ", rpc.Name, "(ctx ", ctx_alias, ".Context, req ", ftype_req, ") (", ftype_resp, ", error) {")
 			g.b_body.In()
@@ -224,17 +355,11 @@ func (g *Generator) GenerateServices() error {
 
 			g.Body().P()
 
-			tc_req := g.getTypeConv(rpc.RequestType)
-			tc_resp := g.getTypeConv(rpc.ResponseType)
-
 			// default return value
-			defretvalue, ok := tc_resp.EmptyValue(g, rpc.ResponseType, true)
-			if !ok {
-				defretvalue, ok = g.tc_default.EmptyValue(g, rpc.ResponseType, true)
-			}
+			defretvalue, _ := tc_resp.EmptyValue(g, rpc.ResponseType, true)
 
 			// convert request
-			_, err := tc_req.GenerateSrvImport(g.SrvType, g, rpc.RequestType)
+			_, err := tc_req.GenerateSrvImport(g.SrvType, g, "req", "wreq", rpc.RequestType)
 			if err != nil {
 				return err
 			}
@@ -261,7 +386,7 @@ func (g *Generator) GenerateServices() error {
 			// convert response
 			g.Body().P("err = nil")
 
-			_, err = tc_resp.GenerateSrvExport(g.SrvType, g, rpc.ResponseType)
+			_, err = tc_resp.GenerateSrvExport(g.SrvType, g, "resp", "wresp", rpc.ResponseType)
 			if err != nil {
 				return err
 			}
@@ -285,8 +410,6 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.P("func Register", svcName, "Server(s *", grpc_alias, ".Server, srv ", svcName, "Server) {")
 		g.b_body.In()
 
-		func_alias := g.FileDep(g.filedep, "", true)
-
 		g.b_body.P(func_alias, ".Register", svcName, "Server(s, newWrap", svcName, "Server(srv))")
 
 		g.b_body.Out()
@@ -305,7 +428,7 @@ func (g *Generator) getTypeConv(fldtype string) TypeConverter {
 		for _, tc := range g.TypeConvs {
 			for _, src := range tc.GetSources() {
 				if src.FilePath == tp.FileDep.FilePath && src.PackageName == tp.FileDep.ProtoFile.PackageName {
-					return tc
+					return NewTypeConverterList([]TypeConverter{tc, g.tc_default})
 				}
 			}
 		}

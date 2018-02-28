@@ -1,6 +1,9 @@
 package fproto_gowrap
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // And now lots of helper functions.
 
@@ -76,4 +79,11 @@ func baseName(name string) string {
 		name = name[0:i]
 	}
 	return name
+}
+
+func LowerCaseFirst(str string) string {
+	for i, v := range str {
+		return string(unicode.ToLower(v)) + str[i+1:]
+	}
+	return ""
 }

@@ -10,9 +10,13 @@ import (
 type UUIDConvert struct {
 }
 
-func (tc *UUIDConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
-	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
-	return fmt.Sprintf("%s.%s", alias, "UUID")
+func (tc *UUIDConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
+	if !pbsource {
+		alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+		return fmt.Sprintf("%s.%s", alias, "UUID"), true
+	} else {
+		return "", false
+	}
 }
 
 func (tc *UUIDConvert) GetSources() []fproto_gowrap.TypeConverterSource {
@@ -67,29 +71,29 @@ func (tc *UUIDConvert) GenerateFieldExport(g *fproto_gowrap.Generator, message *
 	return true, nil
 }
 
-func (tc *UUIDConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *UUIDConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
 
 	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
 
-	g.Body().P("var wreq ", alias, ".UUID")
+	g.Body().P("var ", retVarName, " ", alias, ".UUID")
 
-	g.Body().P("wreq, err = ", alias, ".FromString(req.Value)")
+	g.Body().P(retVarName, ", err = ", alias, ".FromString(", reqVarName, ".Value)")
 
 	return true, nil
 }
 
-func (tc *UUIDConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *UUIDConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
 
 	ftype, _, _ := g.GetType(fldtype, true)
 
-	g.Body().P("wresp := &", ftype, "{}")
-	g.Body().P("wresp.Value = resp.String()")
+	g.Body().P(retVarName, " := &", ftype, "{}")
+	g.Body().P(retVarName, ".Value = ", reqVarName, ".String()")
 
 	return true, nil
 }
@@ -97,7 +101,7 @@ func (tc *UUIDConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Genera
 func (tc *UUIDConvert) EmptyValue(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
 	if !pbsource {
 		alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
-		return "&" + alias + ".UUID{}", true
+		return alias + ".UUID{}", true
 	}
 	return "", false
 }

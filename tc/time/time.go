@@ -19,9 +19,13 @@ func (tc *TimeConvert) GetSources() []fproto_gowrap.TypeConverterSource {
 	}
 }
 
-func (tc *TimeConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) string {
-	alias := g.Dep("time", "time")
-	return fmt.Sprintf("%s.%s", alias, "Time")
+func (tc *TimeConvert) GetType(g *fproto_gowrap.Generator, fldtype string, pbsource bool) (string, bool) {
+	if !pbsource {
+		alias := g.Dep("time", "time")
+		return fmt.Sprintf("%s.%s", alias, "Time"), true
+	} else {
+		return "", false
+	}
 }
 
 func (tc *TimeConvert) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
@@ -78,7 +82,7 @@ func (tc *TimeConvert) GenerateFieldExport(g *fproto_gowrap.Generator, message *
 	return true, nil
 }
 
-func (tc *TimeConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *TimeConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
@@ -86,7 +90,7 @@ func (tc *TimeConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Genera
 	return false, nil
 }
 
-func (tc *TimeConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Generator, fldtype string) (bool, error) {
+func (tc *TimeConvert) GenerateSrvExport(srvtype string, g *fproto_gowrap.Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {
 	if srvtype != "grpc" {
 		return false, nil
 	}
