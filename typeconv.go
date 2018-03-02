@@ -9,11 +9,11 @@ type TypeConverter interface {
 	// Returns a type name. If pbsource=true, returns the Golang protobuf type, else returns the GoWrap type.
 	GetType(g *Generator, fldtype string, pbsource bool) (string, bool)
 	// Generates a field inside a struct definition.
-	GenerateField(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
+	GenerateField(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
 	// Generates code to import one fields.
-	GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
+	GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
 	// Generates code to export one fields.
-	GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
+	GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
 
 	// Generate codee to import one field into service definitions.
 	GenerateSrvImport(srvtype string, g *Generator, reqVarName string, retVarName string, fldtype string) (bool, error)
@@ -58,7 +58,7 @@ func (t *TypeConverterList) GetType(g *Generator, fldtype string, pbsource bool)
 	return "", false
 }
 
-func (t *TypeConverterList) GenerateField(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (t *TypeConverterList) GenerateField(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
 	for _, item := range t.list {
 		ok, err := item.GenerateField(g, message, fld)
 		if ok || err != nil {
@@ -68,7 +68,7 @@ func (t *TypeConverterList) GenerateField(g *Generator, message *fproto.MessageE
 	return false, nil
 }
 
-func (t *TypeConverterList) GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (t *TypeConverterList) GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
 	for _, item := range t.list {
 		ok, err := item.GenerateFieldImport(g, message, fld)
 		if ok || err != nil {
@@ -78,7 +78,7 @@ func (t *TypeConverterList) GenerateFieldImport(g *Generator, message *fproto.Me
 	return false, nil
 }
 
-func (t *TypeConverterList) GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
+func (t *TypeConverterList) GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
 	for _, item := range t.list {
 		ok, err := item.GenerateFieldExport(g, message, fld)
 		if ok || err != nil {

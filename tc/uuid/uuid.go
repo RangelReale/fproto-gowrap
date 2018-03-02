@@ -29,47 +29,59 @@ func (tc *UUIDConvert) GetSources() []fproto_gowrap.TypeConverterSource {
 	}
 }
 
-func (tc *UUIDConvert) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
-	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+func (tc *UUIDConvert) GenerateField(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	switch xfld := fld.(type) {
+	case *fproto.FieldElement:
+		alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
 
-	ftype := fmt.Sprintf("%s.UUID", alias)
+		ftype := fmt.Sprintf("%s.UUID", alias)
 
-	if fld.Repeated {
-		ftype = "[]" + ftype
+		if xfld.Repeated {
+			ftype = "[]" + ftype
+		}
+
+		g.Body().P(fproto_gowrap.CamelCase(xfld.Name), " ", ftype)
+
+		return true, nil
 	}
-
-	g.Body().P(fproto_gowrap.CamelCase(fld.Name), " ", ftype)
-
-	return true, nil
+	return false, nil
 }
 
-func (tc *UUIDConvert) GenerateFieldImport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
-	alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
+func (tc *UUIDConvert) GenerateFieldImport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	switch xfld := fld.(type) {
+	case *fproto.FieldElement:
+		alias := g.Dep("github.com/RangelReale/go.uuid", "uuid")
 
-	g.Body().P("if s.", fproto_gowrap.CamelCase(fld.Name), " != nil {")
-	g.Body().In()
+		g.Body().P("if s.", fproto_gowrap.CamelCase(xfld.Name), " != nil {")
+		g.Body().In()
 
-	g.Body().P("var err error")
-	g.Body().P("m.", fproto_gowrap.CamelCase(fld.Name), ", err = ", alias, ".FromString(s.", fproto_gowrap.CamelCase(fld.Name), ".Value)")
-	g.Body().P("if err != nil {")
-	g.Body().In()
-	g.Body().P("return err")
-	g.Body().Out()
-	g.Body().P("}")
+		g.Body().P("var err error")
+		g.Body().P("m.", fproto_gowrap.CamelCase(xfld.Name), ", err = ", alias, ".FromString(s.", fproto_gowrap.CamelCase(xfld.Name), ".Value)")
+		g.Body().P("if err != nil {")
+		g.Body().In()
+		g.Body().P("return err")
+		g.Body().Out()
+		g.Body().P("}")
 
-	g.Body().Out()
-	g.Body().P("}")
+		g.Body().Out()
+		g.Body().P("}")
 
-	return true, nil
+		return true, nil
+	}
+	return false, nil
 }
 
-func (tc *UUIDConvert) GenerateFieldExport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error) {
-	ftype, _, _ := g.GetType(fld.Type, true)
+func (tc *UUIDConvert) GenerateFieldExport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	switch xfld := fld.(type) {
+	case *fproto.FieldElement:
+		ftype, _, _ := g.GetType(xfld.Type, true)
 
-	g.Body().P("ret.", fproto_gowrap.CamelCase(fld.Name), " = &", ftype, "{}")
-	g.Body().P("ret.", fproto_gowrap.CamelCase(fld.Name), ".Value = m.", fproto_gowrap.CamelCase(fld.Name), ".String()")
+		g.Body().P("ret.", fproto_gowrap.CamelCase(xfld.Name), " = &", ftype, "{}")
+		g.Body().P("ret.", fproto_gowrap.CamelCase(xfld.Name), ".Value = m.", fproto_gowrap.CamelCase(xfld.Name), ".String()")
 
-	return true, nil
+		return true, nil
+	}
+	return false, nil
 }
 
 func (tc *UUIDConvert) GenerateSrvImport(srvtype string, g *fproto_gowrap.Generator, reqVarName string, retVarName string, fldtype string) (bool, error) {

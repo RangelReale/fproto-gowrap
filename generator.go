@@ -92,6 +92,22 @@ func (g *Generator) GenerateMessages() error {
 				} else {
 					return fmt.Errorf("No type converter found")
 				}
+			case *fproto.MapFieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateField(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
+				}
+			case *fproto.OneOfElement:
+				_, err := g.tc_default.GenerateField(g, message, xfld)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		g.b_body.Out()
@@ -108,6 +124,17 @@ func (g *Generator) GenerateMessages() error {
 		for _, fld := range message.Fields {
 			switch xfld := fld.(type) {
 			case *fproto.FieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateFieldImport(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
+				}
+			case *fproto.MapFieldElement:
 				tc := g.getTypeConv(xfld.Type)
 				if tc != nil {
 					var err error
@@ -139,6 +166,17 @@ func (g *Generator) GenerateMessages() error {
 		for _, fld := range message.Fields {
 			switch xfld := fld.(type) {
 			case *fproto.FieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateFieldExport(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
+				}
+			case *fproto.MapFieldElement:
 				tc := g.getTypeConv(xfld.Type)
 				if tc != nil {
 					var err error
@@ -606,6 +644,9 @@ func (g *Generator) Dep(imp string, defalias string) string {
 
 // Declares a dependency using a FileDep.
 func (g *Generator) FileDep(filedep *fdep.FileDep, defalias string, pbsource bool) string {
+	if filedep == nil {
+		filedep = g.filedep
+	}
 	var p string
 	if !pbsource && !filedep.IsSame(g.filedep) && filedep.DepType == fdep.DepType_Own {
 		p = g.GoWrapPackage(filedep)
