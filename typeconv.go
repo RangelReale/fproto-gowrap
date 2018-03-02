@@ -2,24 +2,37 @@ package fproto_gowrap
 
 import "github.com/RangelReale/fproto"
 
+// Interface for custom type converters
 type TypeConverter interface {
+	// Returns the list of type identifications this converter supports.
 	GetSources() []TypeConverterSource
+	// Returns a type name. If pbsource=true, returns the Golang protobuf type, else returns the GoWrap type.
 	GetType(g *Generator, fldtype string, pbsource bool) (string, bool)
+	// Generates a field inside a struct definition.
 	GenerateField(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
+	// Generates code to import one fields.
 	GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
+	// Generates code to export one fields.
 	GenerateFieldExport(g *Generator, message *fproto.MessageElement, fld *fproto.FieldElement) (bool, error)
 
+	// Generate codee to import one field into service definitions.
 	GenerateSrvImport(srvtype string, g *Generator, reqVarName string, retVarName string, fldtype string) (bool, error)
+	// Generate codee to export one field into service definitions.
 	GenerateSrvExport(srvtype string, g *Generator, reqVarName string, retVarName string, fldtype string) (bool, error)
 
+	// Returns the empty value for the type.
 	EmptyValue(g *Generator, fldtype string, pbsource bool) (string, bool)
 }
 
+// Identification of a type
 type TypeConverterSource struct {
-	FilePath    string
+	// protobuf file path (ex: google/protobuf/empty.proto)
+	FilePath string
+	// protobuf package name (ex: google.protobuf)
 	PackageName string
 }
 
+// Wrapper to use more than one TypeConverter at the same time
 type TypeConverterList struct {
 	list []TypeConverter
 }

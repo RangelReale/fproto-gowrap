@@ -10,6 +10,7 @@ import (
 	"github.com/RangelReale/fproto/fdep"
 )
 
+// Generators generates a wrapper for a single file.
 type Generator struct {
 	dep        *fdep.Dep
 	filedep    *fdep.FileDep
@@ -19,15 +20,21 @@ type Generator struct {
 
 	imports map[string]string
 
+	// Interface to do package name generation.
 	PkgSource PkgSource
+
+	// List of type conversions
 	TypeConvs []TypeConverter
-	SrvType   string
+
+	// Service generation type (default is "grpc")
+	SrvType string
 }
 
-func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
-	filedep, ok := dep.Files[filename]
+// Creates a new generator for the file path.
+func NewGenerator(dep *fdep.Dep, filepath string) (*Generator, error) {
+	filedep, ok := dep.Files[filepath]
 	if !ok {
-		return nil, fmt.Errorf("File %s not found", filename)
+		return nil, fmt.Errorf("File %s not found", filepath)
 	}
 
 	return &Generator{
@@ -41,10 +48,12 @@ func NewGenerator(dep *fdep.Dep, filename string) (*Generator, error) {
 	}, nil
 }
 
+// Returns the body part builder
 func (g *Generator) Body() *Builder {
 	return g.b_body
 }
 
+// Executes the generator
 func (g *Generator) Generate() error {
 	err := g.GenerateMessages()
 	if err != nil {
@@ -59,11 +68,15 @@ func (g *Generator) Generate() error {
 	return nil
 }
 
+// Generates the protobuf messages
 func (g *Generator) GenerateMessages() error {
 	for _, message := range g.filedep.ProtoFile.Messages {
 		structName := CamelCaseSlice(strings.Split(message.Name, "."))
 		sourceAlias := g.FileDep(g.filedep, "", true)
 
+		//
+		// type MyMessage struct
+		//
 		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
@@ -82,7 +95,10 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.P("}")
 		g.b_body.P()
 
-		// Import
+		//
+		// func (m *MyMessage) Import(s *myapp.MyMessage) error
+		//
+
 		g.b_body.P("func (m *", structName, ") Import(s *", sourceAlias, ".", structName, ") error {")
 		g.b_body.In()
 
@@ -105,7 +121,10 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.P("}")
 		g.b_body.P()
 
-		// Export
+		//
+		// func (m *MyMessage) Export() (*myapp.MyMessage, error)
+		//
+
 		g.b_body.P("func (m *", structName, ") Export() (*", sourceAlias, ".", structName, ", error) {")
 		g.b_body.In()
 
@@ -135,6 +154,7 @@ func (g *Generator) GenerateMessages() error {
 	return nil
 }
 
+// Generate gRPC service wrappers.
 func (g *Generator) GenerateServices() error {
 	if g.SrvType == "" {
 		return nil
@@ -147,6 +167,7 @@ func (g *Generator) GenerateServices() error {
 		return nil
 	}
 
+	// import all required dependencies
 	ctx_alias := g.Dep("golang.org/x/net/context", "context")
 	grpc_alias := g.Dep("google.golang.org/grpc", "grpc")
 	wraputil_alias := g.Dep("github.com/RangelReale/fproto-gowrap/wraputil", "wraputil")
@@ -157,6 +178,10 @@ func (g *Generator) GenerateServices() error {
 
 		//
 		// CLIENT
+		//
+
+		//
+		// type MyServiceClient interface
 		//
 
 		g.b_body.P("type ", svcName, "Client interface {")
@@ -173,22 +198,36 @@ func (g *Generator) GenerateServices() error {
 			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
 			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
 
-			g.b_body.P(rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...grpc.CallOption) (", ftype_resp, ", error)")
+			//
+			// MyRPC(ctx context.Context, in *MyReq, opts ...grpc.CallOption) (*MyResp, error)
+			//
+
+			g.b_body.P(rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...", grpc_alias, ".CallOption) (", ftype_resp, ", error)")
 		}
 
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
 
+		//
+		// type wrapMyServiceClient struct
+		//
+
 		g.b_body.P("type wrap", svcName, "Client struct {")
 		g.b_body.In()
 
+		// the default Golang protobuf client
 		g.b_body.P("cli ", func_alias, ".", svcName, "Client")
+		// the customizable error handler
 		g.b_body.P("errorHandler ", wraputil_alias, ".ServiceErrorHandler")
 
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
+
+		//
+		// func NewMyServiceClient(cc *grpc.ClientConn, errorHandler ...wraputil.ServiceErrorHandler) MyServiceClient
+		//
 
 		g.b_body.P("func New", svcName, "Client(cc *", grpc_alias, ".ClientConn, errorHandler ...", wraputil_alias, ".ServiceErrorHandler) ", svcName, "Client {")
 		g.b_body.In()
@@ -212,6 +251,8 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.P("}")
 		g.b_body.P()
 
+		// Implement each RPC wrapper
+
 		for _, rpc := range service.RPCs {
 			tc_req := g.getTypeConv(rpc.RequestType)
 			tc_resp := g.getTypeConv(rpc.ResponseType)
@@ -223,7 +264,11 @@ func (g *Generator) GenerateServices() error {
 			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
 			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
 
-			g.b_body.P("func (w *wrap", svcName, "Client) ", rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...grpc.CallOption) (", ftype_resp, ", error) {")
+			//
+			// func (w *wrapMyServiceClient) MyRPC(ctx context.Context, in *MyReq, opts ...grpc.CallOption) (*MyResp, error)
+			//
+
+			g.b_body.P("func (w *wrap", svcName, "Client) ", rpc.Name, "(ctx ", ctx_alias, ".Context, in ", ftype_req, ", opts ...", grpc_alias, ".CallOption) (", ftype_resp, ", error) {")
 			g.b_body.In()
 			g.Body().P("var err error")
 
@@ -274,6 +319,7 @@ func (g *Generator) GenerateServices() error {
 
 			g.Body().P()
 
+			// Return response
 			g.b_body.P("return wresp, nil")
 
 			g.b_body.Out()
@@ -283,6 +329,10 @@ func (g *Generator) GenerateServices() error {
 
 		//
 		// SERVER
+		//
+
+		//
+		// type MyServiceServer interface
 		//
 
 		g.b_body.P("type ", svcName, "Server interface {")
@@ -299,12 +349,20 @@ func (g *Generator) GenerateServices() error {
 			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, false)
 			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, false)
 
+			//
+			// MyRPC(ctx.Context, *MyReq) (*MyResp, error)
+			//
+
 			g.b_body.P(rpc.Name, "(", ctx_alias, ".Context, ", ftype_req, ") (", ftype_resp, ", error)")
 		}
 
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
+
+		//
+		// type wrapMyServiceServer struct
+		//
 
 		g.b_body.P("type wrap", svcName, "Server struct {")
 		g.b_body.In()
@@ -315,6 +373,10 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
+
+		//
+		// func newWrapMyServiceServer(srv MyServiceServer) *wrapMyServiceServer
+		//
 
 		g.b_body.P("func newWrap", svcName, "Server(srv ", svcName, "Server) *wrap", svcName, "Server {")
 		g.b_body.In()
@@ -338,6 +400,7 @@ func (g *Generator) GenerateServices() error {
 		g.b_body.P("}")
 		g.b_body.P()
 
+		// Generate RPCs
 		for _, rpc := range service.RPCs {
 			tc_req := g.getTypeConv(rpc.RequestType)
 			tc_resp := g.getTypeConv(rpc.ResponseType)
@@ -348,6 +411,10 @@ func (g *Generator) GenerateServices() error {
 
 			ftype_req, _ := tc_req.GetType(g, rpc.RequestType, true)
 			ftype_resp, _ := tc_resp.GetType(g, rpc.ResponseType, true)
+
+			//
+			// func (w *wrapMyServiceServer) MyRPC(ctx context.Context, req *myapp.MyReq) (*myapp.MyResp, error)
+			//
 
 			g.b_body.P("func (w *wrap", svcName, "Server) ", rpc.Name, "(ctx ", ctx_alias, ".Context, req ", ftype_req, ") (", ftype_resp, ", error) {")
 			g.b_body.In()
@@ -400,6 +467,7 @@ func (g *Generator) GenerateServices() error {
 
 			g.Body().P()
 
+			// return response
 			g.b_body.P("return wresp, nil")
 
 			g.b_body.Out()
@@ -407,9 +475,14 @@ func (g *Generator) GenerateServices() error {
 			g.b_body.P()
 		}
 
+		//
+		// func RegisterMyServiceServer(s *grpc.Server, srv MyServiceServer)
+		//
+
 		g.b_body.P("func Register", svcName, "Server(s *", grpc_alias, ".Server, srv ", svcName, "Server) {")
 		g.b_body.In()
 
+		// myapp.RegisterMyServiceServer(s, newWrapMyServiceServer(srv))
 		g.b_body.P(func_alias, ".Register", svcName, "Server(s, newWrap", svcName, "Server(srv))")
 
 		g.b_body.Out()
@@ -421,6 +494,7 @@ func (g *Generator) GenerateServices() error {
 	return nil
 }
 
+// Get type converter for type
 func (g *Generator) getTypeConv(fldtype string) TypeConverter {
 	tp, scalar := g.GetDepType(fldtype)
 
@@ -437,6 +511,7 @@ func (g *Generator) getTypeConv(fldtype string) TypeConverter {
 	return g.tc_default
 }
 
+// Get dependent type
 func (g *Generator) GetDepType(fldtype string) (tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
 	if _, ok := fproto.ParseScalarType(fldtype); ok {
@@ -454,6 +529,9 @@ func (g *Generator) GetDepType(fldtype string) (tp *fdep.DepType, isscalar bool)
 	return
 }
 
+// Get type for field.
+// If pbsource=true, returns the name for the source Golang generated file. Else returns the name
+// generated by GoWrap.
 func (g *Generator) GetType(fldtype string, pbsource bool) (t string, tp *fdep.DepType, isscalar bool) {
 	// check if if scalar
 	if st, ok := fproto.ParseScalarType(fldtype); ok {
@@ -480,6 +558,7 @@ func (g *Generator) GetType(fldtype string, pbsource bool) (t string, tp *fdep.D
 	return
 }
 
+// Declares a dependency and returns the alias to be used on this file.
 func (g *Generator) Dep(imp string, defalias string) string {
 	var alias string
 	var ok bool
@@ -516,6 +595,7 @@ func (g *Generator) Dep(imp string, defalias string) string {
 	return alias
 }
 
+// Declares a dependency using a FileDep.
 func (g *Generator) FileDep(filedep *fdep.FileDep, defalias string, pbsource bool) string {
 	var p string
 	if !pbsource && !filedep.IsSame(g.filedep) && filedep.DepType == fdep.DepType_Own {
@@ -526,6 +606,7 @@ func (g *Generator) FileDep(filedep *fdep.FileDep, defalias string, pbsource boo
 	return g.Dep(p, defalias)
 }
 
+// Returns the generated file as a string.
 func (g *Generator) String() string {
 	p := baseName(g.GoWrapPackage(g.filedep))
 
@@ -539,11 +620,13 @@ func (g *Generator) String() string {
 	return g.b_head.String() + g.b_body.String()
 }
 
+// Returns the expected output file path and name
 func (g *Generator) Filename() string {
 	p := g.GoWrapPackage(g.filedep)
 	return path.Join(p, strings.TrimSuffix(path.Base(g.filedep.FilePath), path.Ext(g.filedep.FilePath))+".gpb.go")
 }
 
+// Returns the wrapped package name.
 func (g *Generator) GoWrapPackage(filedep *fdep.FileDep) string {
 	if g.PkgSource != nil {
 		if p, ok := g.PkgSource.GetPkg(filedep); ok {

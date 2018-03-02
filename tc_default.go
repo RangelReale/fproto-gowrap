@@ -5,6 +5,7 @@ import (
 	"github.com/RangelReale/fproto/fdep"
 )
 
+// Default type converter for GoWrap.
 type TypeConverter_Default struct {
 }
 

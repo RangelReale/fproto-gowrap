@@ -7,6 +7,7 @@ import (
 	"github.com/RangelReale/fproto-gowrap"
 )
 
+// TypeConverter for github.com/RangelReale/go.uuid using uuid.proto.
 type UUIDConvert struct {
 }
 

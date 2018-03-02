@@ -9,6 +9,7 @@ import (
 	"github.com/RangelReale/fproto/fdep"
 )
 
+// Root wrapper class
 type Wrapper struct {
 	dep *fdep.Dep
 
@@ -16,12 +17,14 @@ type Wrapper struct {
 	TypeConvs []TypeConverter
 }
 
+// Creates a new wrapper
 func NewWrapper(dep *fdep.Dep) *Wrapper {
 	return &Wrapper{
 		dep: dep,
 	}
 }
 
+// Generates one file
 func (wp *Wrapper) GenerateFile(filename string, w io.Writer) error {
 	g, err := NewGenerator(wp.dep, filename)
 	g.PkgSource = wp.PkgSource
@@ -41,6 +44,7 @@ func (wp *Wrapper) GenerateFile(filename string, w io.Writer) error {
 	return err
 }
 
+// Generates all owned files.
 func (wp *Wrapper) GenerateFiles(outputpath string) error {
 	for _, df := range wp.dep.Files {
 		if df.DepType == fdep.DepType_Own {

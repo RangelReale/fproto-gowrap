@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// Helper to build idented text files
 type Builder struct {
 	builder strings.Builder
 	indent  string
@@ -24,14 +25,17 @@ func (g *Builder) Out() {
 	}
 }
 
+// Writes a single byte
 func (g *Builder) WriteByte(c byte) {
 	g.builder.WriteByte(c)
 }
 
+// Writes a full string
 func (g *Builder) WriteString(s string) {
 	g.builder.WriteString(s)
 }
 
+// Writes a list of values
 func (g *Builder) P(str ...interface{}) {
 	g.WriteString(g.indent)
 	for _, v := range str {
@@ -61,6 +65,7 @@ func (g *Builder) P(str ...interface{}) {
 	g.WriteByte('\n')
 }
 
+// Returns the content as a string
 func (g *Builder) String() string {
 	return g.builder.String()
 }

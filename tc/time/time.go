@@ -7,6 +7,7 @@ import (
 	"github.com/RangelReale/fproto-gowrap"
 )
 
+// TypeConverter for time.Time
 type TimeConvert struct {
 }
 
