@@ -80,15 +80,18 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.P("type ", structName, " struct {")
 		g.b_body.In()
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(fld.Type)
-			if tc != nil {
-				var err error
-				_, err = tc.GenerateField(g, message, fld)
-				if err != nil {
-					return err
+			switch xfld := fld.(type) {
+			case *fproto.FieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateField(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
 				}
-			} else {
-				return fmt.Errorf("No type converter found")
 			}
 		}
 		g.b_body.Out()
@@ -103,15 +106,18 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.In()
 
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(fld.Type)
-			if tc != nil {
-				var err error
-				_, err = tc.GenerateFieldImport(g, message, fld)
-				if err != nil {
-					return err
+			switch xfld := fld.(type) {
+			case *fproto.FieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateFieldImport(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
 				}
-			} else {
-				return fmt.Errorf("No type converter found")
 			}
 		}
 
@@ -131,15 +137,18 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.P("ret := &", sourceAlias, ".", structName, "{}")
 
 		for _, fld := range message.Fields {
-			tc := g.getTypeConv(fld.Type)
-			if tc != nil {
-				var err error
-				_, err = tc.GenerateFieldExport(g, message, fld)
-				if err != nil {
-					return err
+			switch xfld := fld.(type) {
+			case *fproto.FieldElement:
+				tc := g.getTypeConv(xfld.Type)
+				if tc != nil {
+					var err error
+					_, err = tc.GenerateFieldExport(g, message, xfld)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("No type converter found")
 				}
-			} else {
-				return fmt.Errorf("No type converter found")
 			}
 		}
 
