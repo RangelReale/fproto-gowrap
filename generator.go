@@ -145,6 +145,11 @@ func (g *Generator) GenerateMessages() error {
 				} else {
 					return fmt.Errorf("No type converter found")
 				}
+			case *fproto.OneOfElement:
+				_, err := g.tc_default.GenerateFieldImport(g, message, xfld)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -187,6 +192,11 @@ func (g *Generator) GenerateMessages() error {
 				} else {
 					return fmt.Errorf("No type converter found")
 				}
+			case *fproto.OneOfElement:
+				_, err := g.tc_default.GenerateFieldExport(g, message, xfld)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -195,6 +205,16 @@ func (g *Generator) GenerateMessages() error {
 		g.b_body.Out()
 		g.b_body.P("}")
 		g.b_body.P()
+
+		//
+		// Helpers
+
+		for _, fld := range message.Fields {
+			_, err := g.tc_default.GenerateFieldHelper(g, message, fld)
+			if err != nil {
+				return err
+			}
+		}
 
 	}
 

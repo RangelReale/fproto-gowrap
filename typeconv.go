@@ -10,6 +10,8 @@ type TypeConverter interface {
 	GetType(g *Generator, fldtype string, pbsource bool) (string, bool)
 	// Generates a field inside a struct definition.
 	GenerateField(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
+	// Generates a field helper if needed (oneof needs it).
+	GenerateFieldHelper(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
 	// Generates code to import one fields.
 	GenerateFieldImport(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error)
 	// Generates code to export one fields.
@@ -61,6 +63,16 @@ func (t *TypeConverterList) GetType(g *Generator, fldtype string, pbsource bool)
 func (t *TypeConverterList) GenerateField(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
 	for _, item := range t.list {
 		ok, err := item.GenerateField(g, message, fld)
+		if ok || err != nil {
+			return ok, err
+		}
+	}
+	return false, nil
+}
+
+func (t *TypeConverterList) GenerateFieldHelper(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	for _, item := range t.list {
+		ok, err := item.GenerateFieldHelper(g, message, fld)
 		if ok || err != nil {
 			return ok, err
 		}

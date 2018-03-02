@@ -1,8 +1,6 @@
 package fproto_gowrap
 
 import (
-	"errors"
-
 	"github.com/RangelReale/fproto"
 	"github.com/RangelReale/fproto/fdep"
 )
@@ -50,7 +48,45 @@ func (tc *TypeConverter_Default) GenerateField(g *Generator, message *fproto.Mes
 
 		return true, nil
 	case *fproto.OneOfElement:
-		return false, errors.New("OneOf is not supported")
+		g.Body().P(CamelCase(xfld.Name), " is", CamelCase(message.Name), "_", CamelCase(xfld.Name))
+		return true, nil
+		//return false, errors.New("OneOf is not supported")
+	}
+	return false, nil
+}
+
+func (tc *TypeConverter_Default) GenerateFieldHelper(g *Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	switch xfld := fld.(type) {
+	case *fproto.OneOfElement:
+		g.Body().P("type is", CamelCase(message.Name), "_", CamelCase(xfld.Name), " interface {")
+		g.Body().In()
+		g.Body().P("is", CamelCase(message.Name), "_", CamelCase(xfld.Name), "()")
+		g.Body().Out()
+		g.Body().P("}")
+		g.Body().P()
+
+		for _, of := range xfld.Fields {
+			switch ofld := of.(type) {
+			case *fproto.FieldElement:
+				g.Body().P("type ", CamelCase(message.Name), "_", CamelCase(ofld.Name), " struct {")
+				g.Body().In()
+
+				_, err := tc.GenerateField(g, message, ofld)
+				if err != nil {
+					return false, err
+				}
+
+				g.Body().Out()
+
+				g.Body().P("}")
+				g.Body().P()
+
+				g.Body().P("func (*", CamelCase(message.Name), "_", CamelCase(ofld.Name), ") is", CamelCase(message.Name), "_", CamelCase(xfld.Name), "() {}")
+				g.Body().P()
+			}
+		}
+
+		return true, nil
 	}
 	return false, nil
 }
@@ -123,6 +159,22 @@ func (tc *TypeConverter_Default) GenerateFieldImport(g *Generator, message *fpro
 			g.Body().P("m.", CamelCase(xfld.Name), "[mn] = mi")
 		}
 		g.Body().Out()
+		g.Body().P("}")
+	case *fproto.OneOfElement:
+		field_alias := g.FileDep(nil, "", true)
+
+		g.Body().P("switch s.", CamelCase(xfld.Name), ".(type) {")
+
+		for _, of := range xfld.Fields {
+			switch ofld := of.(type) {
+			case *fproto.FieldElement:
+				g.Body().P("case *", field_alias, ".", CamelCase(message.Name), "_", CamelCase(ofld.Name), ":")
+				g.Body().In()
+				g.Body().P("break")
+				g.Body().Out()
+			}
+		}
+
 		g.Body().P("}")
 	}
 	return false, nil

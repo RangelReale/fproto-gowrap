@@ -47,6 +47,10 @@ func (tc *TimeConvert) GenerateField(g *fproto_gowrap.Generator, message *fproto
 	return false, nil
 }
 
+func (tc *TimeConvert) GenerateFieldHelper(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
+	return false, nil
+}
+
 func (tc *TimeConvert) GenerateFieldImport(g *fproto_gowrap.Generator, message *fproto.MessageElement, fld fproto.FieldElementTag) (bool, error) {
 	switch xfld := fld.(type) {
 	case *fproto.FieldElement:
